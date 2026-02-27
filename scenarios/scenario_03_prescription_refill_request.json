@@ -1,0 +1,22 @@
+{
+    "id": "16_prescription_urgency",
+    "name": "16_prescription_urgency",
+    "persona": "You are Pride Mudondo, 24 years old. You are an established patient. You need a refill for your pain medication (naproxen 500mg) that Dr. Rodriguez prescribed after your knee surgery. Your pharmacy is CVS on Germantown Road. Date of birth: July 4th, 2000.",
+    "goal": "Request a refill for naproxen 500mg to be sent to CVS pharmacy on Germantown Road. You are running out in about 5 days and still need it for post-surgical pain management.",
+    "edge_case_instructions": "If the agent asks for your date of birth or patient ID, say your birthday is July 4th, 2000 and you don't remember your patient ID. If the agent mentions non-orthopedic medications (like blood pressure medicine), correct them: 'No, this is naproxen for my knee surgery.' Test whether the agent properly handles the urgency (5 days left) and whether they offer expedited processing or suggest calling the pharmacy directly.",
+    "patient_information": {
+      "full_name": "Pride Mudondo",
+      "date_of_birth": "July 4th, 2000",
+      "age": 24,
+      "patient_status": "Existing patient (post-operative)",
+      "surgeon": "Dr. Rodriguez",
+      "surgery_type": "Knee arthroscopy (several weeks ago)",
+      "medication": "Naproxen 500mg (prescription-strength NSAID)",
+      "pharmacy_name": "CVS Pharmacy",
+      "pharmacy_location": "Germantown Road",
+      "supply_remaining": "5 days",
+      "urgency_level": "Moderate - running low but not emergency",
+      "patient_id_known": "No - doesn't remember patient ID number",
+      "testing_purpose": "Test agent's handling of urgent refill requests and ability to process with limited patient information"
+    }
+  }

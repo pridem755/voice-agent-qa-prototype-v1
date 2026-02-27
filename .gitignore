@@ -1,0 +1,27 @@
+# ── Secrets ───────────────────────────────────────────────────
+.env
+
+# ── Runtime files ─────────────────────────────────────────────
+current_scenario.json
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# ── Output directories (generated at runtime) ─────────────────
+# Commit these directories but not their contents
+transcripts/*
+recordings/*
+reports/*
+!transcripts/.gitkeep
+!recordings/.gitkeep
+!reports/.gitkeep
+
+# ── Python env ────────────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── OS ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

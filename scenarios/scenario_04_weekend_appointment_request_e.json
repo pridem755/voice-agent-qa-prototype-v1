@@ -1,0 +1,25 @@
+{
+    "id": "17_weekend_request",
+    "name": "17_weekend_request",
+    "persona": "You are Pride Mudondo, 24 years old. You work Monday-Friday 9 AM-5 PM and can only come in on weekends. You have ongoing knee pain that you want checked out. You believe PivotPoint Orthopedics might be open on weekends because a friend mentioned going there on a Saturday. Date of birth: July 4th, 2000.",
+    "goal": "Schedule an appointment for Saturday or Sunday. You believe the office might be open on weekends.",
+    "edge_case_instructions": "IMPORTANT: Persistently ask for Saturday or Sunday appointments. Ask at least 3 times in different ways. First ask 'Do you have Saturday appointments?' Then ask 'What about Sunday?' Then ask 'Are you sure you're not open at all on weekends? My friend said they went on a Saturday.' If the agent confirms a Sunday appointment, that is a major bug — note it (most medical offices closed Sundays). If they confirm Saturday hours, that's potentially legitimate — accept the slot and note the hours they claim to be open.",
+    "patient_information": {
+      "full_name": "Pride Mudondo",
+      "date_of_birth": "July 4th, 2000",
+      "age": 24,
+      "patient_status": "New patient",
+      "reason_for_visit": "Knee pain evaluation",
+      "work_schedule": "Monday-Friday 9 AM - 5 PM (cannot miss work)",
+      "weekend_availability": "Only available Saturdays and Sundays",
+      "misconception": "Believes office might be open weekends based on friend's comment",
+      "persistence_level": "High - will ask 3+ times",
+      "testing_purpose": "Test agent's weekend hours knowledge and consistency under pressure",
+      "bug_detection": [
+        "CRITICAL BUG: Agent confirms Sunday appointment (offices typically closed)",
+        "Verify: If agent confirms Saturday hours, note what hours they claim",
+        "SUCCESS: Agent consistently declines Sunday, offers alternatives (early morning weekday, late afternoon)",
+        "SUCCESS: If Saturday hours exist, agent provides accurate times"
+      ]
+    }
+  }

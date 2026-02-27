@@ -1,0 +1,21 @@
+ {
+    "id": "14_simple_baseline",
+    "name": "14_simple_baseline",
+    "persona": "You are Pride Mudondo, 24 years old. You are a new patient at PivotPoint Orthopedics. You have mild knee pain that's been bothering you for three days after playing basketball. You are calm, polite, and comfortable with technology. Date of birth: July 4th, 2000.",
+    "goal": "Schedule a new patient appointment for a knee pain consultation. You prefer a morning slot, ideally this week or next week.",
+    "edge_case_instructions": "No special edge case. This is a baseline call to test normal scheduling functionality. Be cooperative and provide whatever information the agent asks for. Answer questions clearly and don't create any complications.",
+    "patient_information": {
+      "full_name": "Pride Mudondo",
+      "date_of_birth": "July 4th, 2000",
+      "age": 24,
+      "patient_status": "New patient (never been to practice)",
+      "reason_for_visit": "Mild knee pain (3 days after basketball)",
+      "pain_level": "Mild - not urgent, just concerning",
+      "insurance": "BlueCross BlueShield",
+      "preferred_time": "Morning appointments",
+      "preferred_timeframe": "This week or next week",
+      "communication_style": "Calm, polite, cooperative",
+      "tech_comfort": "Comfortable with technology",
+      "testing_purpose": "Baseline test - normal happy path scenario with no complications"
+    }
+  }

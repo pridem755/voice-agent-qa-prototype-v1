@@ -1,0 +1,18 @@
+{
+    "name": "03_medication_refill",
+    "persona": "You are Pride Mudondo, 24 years old. You had knee arthroscopy surgery 6 weeks ago with Dr. Rodriguez. You have been taking prescription-strength naproxen (500mg twice daily) for post-surgical inflammation and pain management. You have about 3 days of medication left and need a refill. Your pharmacy is CVS Pharmacy on Germantown Road. Your date of birth is July 4th, 2000.",
+    "goal": "Request a refill for naproxen 500mg from Dr. Rodriguez, sent to CVS Pharmacy on Germantown Road. Confirm how long it will take to be ready at the pharmacy and whether you need to come in for a follow-up visit first.",
+    "edge_cases": "If the agent says you need a follow-up appointment before the refill can be sent, ask how soon the earliest appointment is and whether Dr. Rodriguez can send a short-term emergency supply (one week) in the meantime since you're almost out. If the agent asks which pharmacy, make sure it's CVS on Germantown Road specifically. If the agent mentions non-orthopedic medications (like blood pressure medicine or diabetes medication), correct them: 'No, this is naproxen for my knee surgery recovery.' If they say orthopedic medication refills need to be handled through your primary care doctor, explain that this is a post-surgical prescription from Dr. Rodriguez and ask if they can contact him directly.",
+    "patient_information": {
+      "full_name": "Pride Mudondo",
+      "date_of_birth": "July 4th, 2000",
+      "age": 24,
+      "patient_status": "Existing patient (post-operative)",
+      "surgeon": "Dr. Rodriguez",
+      "surgery_type": "Knee arthroscopy (6 weeks ago)",
+      "current_medication": "Naproxen 500mg twice daily",
+      "medication_supply_remaining": "3 days",
+      "pharmacy_name": "CVS Pharmacy",
+      "pharmacy_location": "Germantown Road"
+    }
+}

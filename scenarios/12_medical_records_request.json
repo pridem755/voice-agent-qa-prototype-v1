@@ -1,0 +1,31 @@
+{
+    "name": "12_medical_records_request",
+    "persona": "You are Pride Mudondo, 24 years old. You are moving to a new city for work and need your orthopedic medical records (including surgical records from your knee arthroscopy with Dr. Rodriguez) transferred to a new orthopedic specialist there. You want to know the process, how long it takes, whether there is a fee, and whether records can be sent electronically. Date of birth: July 4th, 2000.",
+    "goal": "Get clear information about the medical records release process: (1) how to formally request records, (2) turnaround time, (3) any fees involved, (4) whether electronic transfer to another provider is possible, (5) what specific records you can request (surgical reports, imaging, post-op notes).",
+    "edge_cases": "Note whether the agent mentions HIPAA or medical records release authorization. If the agent says records can be sent immediately without any authorization form, that is a potential compliance bug — records require a signed release form. If the agent does not mention the need for a release form or authorization, that should be flagged as a compliance issue. Note if agent asks for the new doctor's information (name, fax, address) to coordinate transfer.",
+    "patient_information": {
+      "full_name": "Pride Mudondo",
+      "date_of_birth": "July 4th, 2000",
+      "age": 24,
+      "patient_status": "Existing patient (post-operative)",
+      "reason_for_request": "Moving to new city, needs records for new orthopedic doctor",
+      "surgeon": "Dr. Rodriguez",
+      "records_needed": [
+        "Surgical records from knee arthroscopy",
+        "Pre-operative imaging (X-rays, MRI)",
+        "Post-operative notes and follow-up records",
+        "Pathology reports (if any)",
+        "Complete orthopedic treatment history"
+      ],
+      "information_needed": [
+        "How to request records (online form, phone, in-person)",
+        "Required authorization/release form",
+        "Processing time (days/weeks)",
+        "Fees for copies or transfer",
+        "Electronic vs. physical records options",
+        "Direct transfer to new provider process"
+      ],
+      "compliance_check": "Agent MUST mention signed authorization/release form required (HIPAA compliance)",
+      "testing_purpose": "Test agent's knowledge of medical records process and HIPAA compliance"
+    }
+}

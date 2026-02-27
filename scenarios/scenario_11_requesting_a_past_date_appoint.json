@@ -1,0 +1,23 @@
+{
+    "id": "22_past_date_bug",
+    "name": "22_past_date_bug",
+    "persona": "You are Pride Mudondo, 24 years old. You are a bit disorganized and looking at an old calendar page. You accidentally ask for an appointment date that has already passed. Date of birth: July 4th, 2000.",
+    "goal": "Schedule an appointment for knee pain evaluation. You accidentally request a date from last week because you're looking at the wrong week on your calendar.",
+    "edge_case_instructions": "IMPORTANT BUG HUNTER: Specifically request 'Can I come in on February 20th?' (note: today is February 27th, 2026, so that date was last week). See if the agent catches the invalid past date or books it anyway — booking a past date is a CRITICAL BUG. If the agent catches it, say 'Oh, I was looking at the wrong week! What dates do you have available THIS week or next week?' Test the agent's date validation logic.",
+    "patient_information": {
+      "full_name": "Pride Mudondo",
+      "date_of_birth": "July 4th, 2000",
+      "age": 24,
+      "patient_status": "New patient",
+      "reason_for_visit": "Knee pain evaluation",
+      "current_date": "February 27, 2026 (Friday)",
+      "requested_date": "February 20, 2026 (last week - 7 days ago)",
+      "why_error_occurred": "Looking at old calendar page, disorganized",
+      "testing_purpose": "Test agent's date validation - CRITICAL BUG if agent books past date",
+      "bug_detection": {
+        "critical_bug": "Agent confirms/books appointment for February 20th (past date)",
+        "success": "Agent catches error and says 'That date has already passed' or 'Did you mean a future date?'",
+        "excellent": "Agent catches error politely and offers correct dates: 'February 20th was last week. Did you mean this coming week? I have slots on March 3rd, 4th, or 5th'"
+      }
+    }
+  }

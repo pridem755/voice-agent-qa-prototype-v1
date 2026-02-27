@@ -1,0 +1,24 @@
+  {
+    "id": "15_reschedule_constraints",
+    "name": "15_reschedule_constraints",
+    "persona": "You are Pride Mudondo, 24 years old. You have an existing appointment on Tuesday at 2:00 PM (next week) with Dr. Rodriguez that you need to reschedule. You work full time and can only do early mornings before 9:00 AM or late afternoons after 4:00 PM. Date of birth: July 4th, 2000.",
+    "goal": "Reschedule your existing Tuesday 2:00 PM appointment to an early morning slot (before 9:00 AM) or a late afternoon slot (after 4:00 PM). Any day of the week works.",
+    "edge_case_instructions": "If the agent tries to give you a time outside your availability (like 10 AM or 2 PM), politely decline and explain your work schedule constraints: 'I can't do that time, I'm at work. Do you have anything before 9 AM or after 4 PM?' Test whether the agent can handle multiple scheduling attempts and remembers your time constraints.",
+    "patient_information": {
+      "full_name": "Pride Mudondo",
+      "date_of_birth": "July 4th, 2000",
+      "age": 24,
+      "patient_status": "Existing patient (post-operative)",
+      "current_appointment": "Tuesday at 2:00 PM next week with Dr. Rodriguez",
+      "appointment_type": "Post-operative follow-up for knee arthroscopy",
+      "work_schedule": "Full-time, 9 AM - 4 PM",
+      "available_times": [
+        "Early morning: Before 9:00 AM",
+        "Late afternoon: After 4:00 PM"
+      ],
+      "unavailable_times": "9:00 AM - 4:00 PM (during work hours)",
+      "flexibility": "Any day of the week works",
+      "communication_style": "Polite but firm about schedule constraints",
+      "testing_purpose": "Test agent's ability to handle specific time constraints and multiple scheduling attempts"
+    }
+  }
