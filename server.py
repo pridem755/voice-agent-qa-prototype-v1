@@ -92,12 +92,6 @@ async def media_stream(websocket: WebSocket):
         while stream_sid is None:
             await asyncio.sleep(0.1)
 
-        # Patient speaks first when call connects
-        opening = await brain.respond("Hello?")
-        log.info("[Patient] %s", opening)
-        recorder.add_turn(speaker="patient", text=opening)
-        await speech.speak(text=opening, websocket=websocket, stream_sid=stream_sid)
-
         async for agent_text in speech.utterances():
             agent_text = agent_text.strip()
             if not agent_text:

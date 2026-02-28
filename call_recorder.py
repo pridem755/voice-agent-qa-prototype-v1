@@ -55,7 +55,7 @@ class CallRecorder:
             divider,
             "",
         ]
-
+        
         for turn in self._turns:
             #Formatting elapsed time as [MM:SS] and aligning speaker labels for readability
             m = int(turn["elapsed"]) // 60
@@ -69,7 +69,7 @@ class CallRecorder:
         with open(filename, "w", encoding="utf-8") as fh:
             fh.write("\n".join(lines))
 
-        log.info("Transcript saved → %s (%d turns, %ds)", filename, len(self._turns), int(duration_s))
+        log.info("Transcript saved - %s (%d turns, %ds)", filename, len(self._turns), int(duration_s))
         return filename
 
     @property

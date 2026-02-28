@@ -3,33 +3,98 @@ import audioop
 import base64
 import json
 import logging
+import time
 from typing import AsyncGenerator, Optional
-
+from dataclasses import dataclass
 import httpx
 import miniaudio
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveOptions, LiveTranscriptionEvents
-
 from config import settings
 
 log = logging.getLogger(__name__)
 
-_DEEPGRAM_OPTIONS = LiveOptions(
-    model="nova-2",          
-    language="en-US",
-    encoding="mulaw",        
-    sample_rate=8000,        
-    channels=1,              
-    punctuate=True,         
-    endpointing=2000,        
-    interim_results=False,   
-)
+#-----------------------------------------------------------------------
+#This module handles the speech processing pipeline: by receiving audio from Twilio, sending it to Deepgram for transcription, and sending TTS responses back to Twilio. 
+#-------------------------------------------------------------------------
+@dataclass
+class SpeechEndSignal:
+    silence_duration: float
+    has_final_transcript: bool
+    transcript_text: str
+    confidence: str
+#adaptive algorithm to determine when the user has finished speaking
+class AdaptiveEndOfSpeechDetector:
+    def __init__(self):
+        self.MIN_SILENCE_WITH_FINAL = 1.5
+        self.MIN_SILENCE_NO_FINAL = 3.5
+        self.MAX_WAIT = 8.0
+        
+        self.last_speech_time = 0
+        self.last_final_transcript_time = 0
+        self.has_final_transcript = False
+        self.current_transcript = ""
+        
+    def on_audio_received(self):
+        self.last_speech_time = time.time()
+    
+    def on_transcript(self, text: str, is_final: bool):
+        self.current_transcript = text
+        if is_final:
+            self.has_final_transcript = True
+            self.last_final_transcript_time = time.time()
+            log.debug(f"Final transcript: {text}")
+        else:
+            log.debug(f"Partial transcript: {text}")
+    
+    def get_silence_duration(self) -> float:
+        return time.time() - self.last_speech_time
+    
+    def is_speech_ended(self) -> SpeechEndSignal:
+        silence = self.get_silence_duration()
+        if self.has_final_transcript and silence >= self.MIN_SILENCE_WITH_FINAL:
+            return SpeechEndSignal(
+                silence_duration=silence,
+                has_final_transcript=True,
+                transcript_text=self.current_transcript,
+                confidence="certain"
+            )
+        
+        if silence >= self.MIN_SILENCE_NO_FINAL:
+            return SpeechEndSignal(
+                silence_duration=silence,
+                has_final_transcript=self.has_final_transcript,
+                transcript_text=self.current_transcript,
+                confidence="high"
+            )
+        
+        if silence >= 1.0:
+            return SpeechEndSignal(
+                silence_duration=silence,
+                has_final_transcript=self.has_final_transcript,
+                transcript_text=self.current_transcript,
+                confidence="medium"
+            )
+        
+        return SpeechEndSignal(
+            silence_duration=silence,
+            has_final_transcript=self.has_final_transcript,
+            transcript_text=self.current_transcript,
+            confidence="low"
+        )
+    
+    def reset_for_new_turn(self):
+        self.has_final_transcript = False
+        self.current_transcript = ""
+
 
 class SpeechPipeline:
     def __init__(self):
         self._utterance_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=0)
         self._deepgram_connection = None
         self._closed = False
-        self._is_speaking = False  # Prevents bot from hearing its own voice
+        self._is_speaking = False 
+        
+        self.end_detector = AdaptiveEndOfSpeechDetector()
 
         self._dg_client = DeepgramClient(
             settings.deepgram_api_key,
@@ -43,9 +108,15 @@ class SpeechPipeline:
             try:
                 transcript = result.channel.alternatives[0].transcript
                 is_final = result.is_final
-                if is_final and transcript.strip() and len(transcript.strip()) > 3:
-                    log.debug("Deepgram final transcript: %s", transcript)
-                    await self._utterance_queue.put(transcript)
+                
+                if transcript.strip():
+                    self.end_detector.on_transcript(transcript, is_final)
+                    
+                    if is_final and len(transcript.strip()) > 3:
+                        log.debug("Deepgram final transcript: %s", transcript)
+                        await self._wait_for_speech_end()
+                        await self._utterance_queue.put(transcript)
+                        
             except (AttributeError, IndexError) as exc:
                 log.warning("Malformed Deepgram event: %s", exc)
 
@@ -67,14 +138,31 @@ class SpeechPipeline:
             sample_rate=8000,
             channels=1,
             punctuate=True,
-            endpointing=2000,
-            interim_results=False,
+            endpointing=3000,
+            interim_results=True,
         )
+        
         await self._deepgram_connection.start(options)
+    
+    async def _wait_for_speech_end(self):
+        max_wait = self.end_detector.MAX_WAIT
+        check_interval = 0.3
+        wait_start = time.time()
+        
+        while time.time() - wait_start < max_wait:
+            signal = self.end_detector.is_speech_ended()
+            
+            if signal.confidence in ["high", "certain"]:
+                log.info(f"Speech ended ({signal.confidence}, {signal.silence_duration:.1f}s)")
+                return
+            
+            await asyncio.sleep(check_interval)
+        
+        log.warning("Max wait exceeded - responding anyway")
 
     async def feed_audio(self, mulaw_bytes: bytes):
-        # Skip audio while patient is speaking to prevent hearing own voice
         if self._deepgram_connection and not self._closed and not self._is_speaking:
+            self.end_detector.on_audio_received()
             await self._deepgram_connection.send(mulaw_bytes)
 
     async def utterances(self) -> AsyncGenerator[str, None]:
@@ -95,7 +183,6 @@ class SpeechPipeline:
             mp3_bytes = await self._elevenlabs_tts(text)
             log.info(f"TTS returned {len(mp3_bytes)} bytes, first 4: {mp3_bytes[:4]}")
 
-            # Decode MP3 to raw PCM at 8kHz mono using miniaudio (no ffmpeg needed)
             decoded = miniaudio.decode(
                 mp3_bytes,
                 output_format=miniaudio.SampleFormat.SIGNED16,
@@ -131,8 +218,9 @@ class SpeechPipeline:
             log.error("TTS/decode failed: %s", exc)
 
         finally:
-            await asyncio.sleep(1.5) 
-            self._is_speaking = False 
+            await asyncio.sleep(2.0) 
+            self._is_speaking = False
+            self.end_detector.reset_for_new_turn()
 
     async def _elevenlabs_tts(self, text: str) -> bytes:
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{settings.elevenlabs_voice_id}"
