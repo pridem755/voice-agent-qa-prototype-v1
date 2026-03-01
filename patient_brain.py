@@ -1,17 +1,21 @@
+"""
+Patient brain - Manages patient side of conversation.
+
+Uses GPT-4 to roleplay as a patient calling a medical office, generating
+natural responses based on scenario goals and conversation history.
+"""
 import logging
-import re
-from typing import Optional
+
 from openai import AsyncOpenAI
-import os
+
 from config import settings
+
 log = logging.getLogger(__name__)
 
-#---------------------------------------------------------------------------
-#PatientBrain: manages the patient side of the conversation, generating replies based on the scenario and conversation history.
-#---------------------------------------------------------------------------    
+# Sentinel token for indicating hang-up
 _HANGUP_TOKEN = "<HANGUP>"
 
-# System prompt template for the patient brain
+# System prompt template for patient brain
 _SYSTEM_TEMPLATE = """\
 You are roleplaying as a patient calling PivotPoint Orthopedics, a medical office. You are a REAL person making a real phone call. Stay completely in character and behave naturally.
 
@@ -81,13 +85,11 @@ The office phone system was built by Pretty Good AI.
      "Could we try the following week?"
 - Do NOT repeat the same constraint more than twice.
 
-
-
 **Information Sharing Examples:**
 
 WRONG (too much at once):
 Agent: "How can I help you?"
-Patient: "Hi, I'd like to schedule a follow-up appointment for my knee surgery with Dr. Rodriguez, preferably late afternoon next week Monday through Thursday." ❌ (Way too much - 25 words, multiple requests)
+Patient: "Hi, I'd like to schedule a follow-up appointment for my knee surgery with Dr. Rodriguez, preferably late afternoon next week Monday through Thursday." (Way too much - 25 words, multiple requests)
 
 RIGHT (gradual reveal):
 Agent: "How can I help you?"
@@ -103,7 +105,7 @@ Agent: "Which days are you available?"
 Patient: "Monday through Thursday next week."(5 words)
 
 **Handling Edge Cases:**
-- When the agent gives you an introduction, listen fully then respond with a brief greeting: "Hi, thanks" or "Hey, how's it going?"
+- When the agent gives you an introduction, listen fully then respond with a brief greeting: for example, "Hi, thanks for answering my call" or "Hey, how's it going?"
 - When the agent doesn't understand you, rephrase simply but don't repeat the exact same words
 - When information seems incorrect, politely correct: "Actually, it's [correct info]"
 - When the agent seems stuck or doesn't know something:
@@ -145,14 +147,14 @@ Patient: "Monday through Thursday next week."(5 words)
   * Address: Realistic Germantown, Maryland address (e.g., "123 Maple Avenue, Germantown")
   * DOB: Make it realistic for your age in persona (format: Month DD, YYYY)
 
-  **Consistency Rule:**
+**Consistency Rule:**
 - Once you state DOB, address, phone, or insurance during a call,
   NEVER change it unless explicitly correcting yourself.
 - Do not drift between different birth dates or details.
   
 **Ending the Call:**
-- Listen for closing phrases: "You're all set", "Is there anything else?", "Have a great day", "Thank you for calling"
-- When you hear a closing phrase AND your goal is accomplished, wrap up briefly: "Thanks, bye!" or "Great, thank you!" and append {hangup_token}
+- Listen for closing phrases: for example, "You're all set", "Is there anything else?", "Have a great day", "Thank you for calling"
+- When you hear a closing phrase AND your goal is accomplished, wrap up briefly:for example, "Thanks for assisting, bye!" or "Great, thank you for assisting!" and append {hangup_token}
 - If your goal is NOT accomplished but the agent is closing, speak up: "Wait, did we [unfinished goal]?"
 - Only append {hangup_token} when:
   1. Your goal is fully achieved AND agent says goodbye, OR
@@ -202,34 +204,61 @@ Examples of bad responses:
 Remember: You are a REAL person on a phone call. Real people are BRIEF. They don't give speeches. They have conversations.
 """
 
+
 class PatientBrain:
+    """Manages patient-side conversation using GPT-4 roleplay."""
+    
     def __init__(self, scenario: dict):
-        self._client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY", "test-key"))
+        """
+        Initialize patient brain for a specific scenario.
+        
+        Args:
+            scenario: Scenario dictionary with persona, goal, and edge cases
+        """
+        self._client = AsyncOpenAI(api_key=settings.openai_api_key)
         self._scenario = scenario
         self._turn_count = 0
         self._hang_up = False
 
-        # Building the system prompt once from the scenario template
+        # Building system prompt from scenario template
         self._system_prompt = _SYSTEM_TEMPLATE.format(
-            persona=scenario.get("persona", "A patient calling about a general inquiry."),
-            goal=scenario.get("goal", "Get information from the medical office."),
-            edge_cases=scenario.get("edge_cases", "None — follow normal patient behaviour."),
+            persona=scenario.get(
+                "persona",
+                "A patient calling about a general inquiry.",
+            ),
+            goal=scenario.get(
+                "goal",
+                "Get information from the medical office.",
+            ),
+            edge_cases=scenario.get(
+                "edge_cases",
+                "None — follow normal patient behaviour.",
+            ),
             hangup_token=_HANGUP_TOKEN,
             max_turns=settings.max_turns,
         )
 
-        # Conversation history in OpenAI's message format.
+        # Conversation history in OpenAI message format
         self._history: list[dict] = []
 
         log.info(
-            "PatientBrain initialised for scenario '%s'",
+            "PatientBrain initialized for scenario '%s'",
             scenario.get("name", "unknown"),
         )
 
     async def respond(self, agent_text: str) -> str:
+        """
+        Generate patient response to agent's utterance.
+        
+        Args:
+            agent_text: What the agent just said
+            
+        Returns:
+            Patient's response text
+        """
         self._turn_count += 1
 
-        # Add agent's utterance to history as "user" role
+        # Adding agent's utterance to history
         self._history.append({"role": "user", "content": agent_text})
 
         try:
@@ -252,30 +281,32 @@ class PatientBrain:
         if _HANGUP_TOKEN in raw_reply:
             self._hang_up = True
             raw_reply = raw_reply.replace(_HANGUP_TOKEN, "").strip()
-            log.info("Hang-up signalled after turn %d", self._turn_count)
+            log.info("Hang-up signaled after turn %d", self._turn_count)
 
-        # Hanging up when we hit the max turn limit (safety net)
+        # Hanging up when max turn limit reached (safety net)
         if self._turn_count >= settings.max_turns:
             self._hang_up = True
-            log.info("Max turns (%d) reached — flagging hang-up", settings.max_turns)
+            log.info("Max turns (%d) reached - flagging hang-up", settings.max_turns)
 
-        # Appending patient's reply to history so the next turn has full context
+        # Appending patient's reply to history for context
         self._history.append({"role": "assistant", "content": raw_reply})
 
         return raw_reply
 
     def should_hang_up(self) -> bool:
-        """Returning True when the brain has decided the call should end."""
+        """Check if patient brain has decided to end the call."""
         return self._hang_up
 
     @property
     def turn_count(self) -> int:
-        """Number of patient turns taken so far in this call."""
+        """Number of patient turns taken in this call."""
         return self._turn_count
 
     def conversation_summary(self) -> list[dict]:
         """
-        Returning the full conversation history.
-        Useful for the post-call QA analyser.
+        Get full conversation history.
+        
+        Returns:
+            List of message dictionaries (role, content)
         """
         return list(self._history)

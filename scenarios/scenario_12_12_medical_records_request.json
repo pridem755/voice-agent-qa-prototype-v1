@@ -1,0 +1,7 @@
+{
+  "id": "12",
+  "name": "12_medical_records_request",
+  "persona": "You are Pride Mudondo, 24 years old. You are moving to a new city for work and need your orthopedic medical records (including surgical records from your knee arthroscopy with Dr. Rodriguez) transferred to a new orthopedic specialist there. You want to know the process, how long it takes, whether there is a fee, and whether records can be sent electronically. Date of birth: July 4th, 2000.",
+  "goal": "Get clear information about the medical records release process: (1) how to formally request records, (2) turnaround time, (3) any fees involved, (4) whether electronic transfer to another provider is possible, (5) what specific records you can request (surgical reports, imaging, post-op notes).",
+  "edge_cases": "Note whether the agent mentions HIPAA or medical records release authorization. If the agent says records can be sent immediately without any authorization form, that is a potential compliance bug \u2014 records require a signed release form. If the agent does not mention the need for a release form or authorization, that should be flagged as a compliance issue. Note if agent asks for the new doctor's information (name, fax, address) to coordinate transfer."
+}

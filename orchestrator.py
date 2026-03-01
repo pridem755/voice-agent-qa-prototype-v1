@@ -1,8 +1,13 @@
+"""
+Scenario management and call orchestration.
+
+Loads test scenarios, places calls via Twilio, monitors call status,
+and runs post-call QA analysis on transcripts.
+"""
 import argparse
 import asyncio
 import json
 import logging
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -12,13 +17,29 @@ from qa_analyzer import QAAnalyzer
 
 log = logging.getLogger(__name__)
 
+# Directory paths
 SCENARIOS_DIR = Path("scenarios")
 TRANSCRIPTS_DIR = Path("transcripts")
 
-#--------------------------------------------------------------------------
-# Scenario management and call orchestration
-#--------------------------------------------------------------------------
+# Timing constants
+SCENARIO_SETUP_DELAY = 1.0 
+INTER_CALL_DELAY = 10.0  
+POLL_INTERVAL = 5.0 
+
+# Terminal call statuses
+TERMINAL_STATUSES = {"completed", "failed", "busy", "no-answer", "canceled"}
+
+
 def load_scenarios(prefix: str = "") -> list[dict]:
+    """
+    Load scenario definitions from JSON files.
+    
+    Args:
+        prefix: Optional prefix to filter scenarios (e.g., "03")
+        
+    Returns:
+        List of scenario dictionaries
+    """
     files = sorted(SCENARIOS_DIR.glob("*.json"))
     if not files:
         log.error("No scenario files found in %s", SCENARIOS_DIR)
@@ -28,25 +49,47 @@ def load_scenarios(prefix: str = "") -> list[dict]:
     for path in files:
         if prefix and not path.stem.startswith(prefix):
             continue
+            
         try:
-            with open(path) as fh:
-                data = json.load(fh)
-            #Injecting the filename stem as the scenario name if not set
+            data = json.loads(path.read_text(encoding="utf-8"))
+            # Injecting filename stem as scenario name if not set
             data.setdefault("name", path.stem)
             scenarios.append(data)
             log.info("Loaded scenario: %s", data["name"])
-        except json.JSONDecodeError as exc:
-            log.warning("Skipping %s - invalid JSON: %s", path, exc)
+        except (json.JSONDecodeError, IOError) as exc:
+            log.warning("Skipping %s - error: %s", path, exc)
 
     return scenarios
 
-def write_current_scenario(scenario: dict):
-    with open("current_scenario.json", "w") as fh:
-        json.dump(scenario, fh, indent=2)
-    log.debug("Wrote current_scenario.json: %s", scenario["name"])
 
-#Placing a call via Twilio's REST API, specifying our webhook for call instructions
+def write_current_scenario(scenario: dict) -> None:
+    """
+    Write scenario to current_scenario.json for server to read.
+    
+    Args:
+        scenario: Scenario dictionary to write
+    """
+    try:
+        Path("current_scenario.json").write_text(
+            json.dumps(scenario, indent=2),
+            encoding="utf-8",
+        )
+        log.debug("Wrote current_scenario.json: %s", scenario["name"])
+    except IOError as exc:
+        log.error("Failed to write current_scenario.json: %s", exc)
+        raise
+
+
 def place_call(twilio_client: TwilioClient) -> str:
+    """
+    Place a call via Twilio REST API.
+    
+    Args:
+        twilio_client: Initialized Twilio client
+        
+    Returns:
+        Call SID (session identifier)
+    """
     webhook_url = f"https://{settings.public_host}/incoming"
     log.info(
         "Placing call: %s - %s via %s",
@@ -55,40 +98,72 @@ def place_call(twilio_client: TwilioClient) -> str:
         webhook_url,
     )
 
-    call = twilio_client.calls.create(
-        to=settings.target_phone_number,
-        from_=settings.twilio_from_number,
-        url=webhook_url,
-        method="POST",
-        #Recording the call on Twilio's side as a backup 
-        record=True,
-    )
-    log.info("Call placed — SID: %s", call.sid)
-    return call.sid
+    try:
+        call = twilio_client.calls.create(
+            to=settings.target_phone_number,
+            from_=settings.twilio_from_number,
+            url=webhook_url,
+            method="POST",
+            record=True, 
+        )
+        log.info("Call placed - SID: %s", call.sid)
+        return call.sid
+    except Exception as exc:
+        log.error("Failed to place call: %s", exc)
+        raise
 
-#Polling Twilio for call status until it reaches a terminal state or times out
-def wait_for_call(twilio_client: TwilioClient, call_sid: str, timeout: int):
-    terminal_statuses = {"completed", "failed", "busy", "no-answer", "canceled"}
+
+def wait_for_call(
+    twilio_client: TwilioClient,
+    call_sid: str,
+    timeout: int,
+) -> str:
+    """
+    Poll Twilio for call status until terminal state or timeout.
+    
+    Args:
+        twilio_client: Initialized Twilio client
+        call_sid: Call session identifier
+        timeout: Maximum seconds to wait
+        
+    Returns:
+        Final call status
+    """
     start = time.monotonic()
 
     while True:
-        elapsed = time.monotonic() - start
+        elapsed = int(time.monotonic() - start)
         if elapsed > timeout:
-            log.warning("Call %s timed out after %ds — moving to next scenario", call_sid, timeout)
-            break
+            log.warning(
+                "Call %s timed out after %ds - moving to next scenario",
+                call_sid,
+                timeout,
+            )
+            return "timeout"
 
-        call = twilio_client.calls(call_sid).fetch()
-        status = call.status
-        log.info("Call status: %s (%.0fs elapsed)", status, elapsed)
+        try:
+            call = twilio_client.calls(call_sid).fetch()
+            status = call.status
+            log.info("Call status: %s (%ds elapsed)", status, elapsed)
 
-        if status in terminal_statuses:
-            log.info("Call %s ended with status: %s", call_sid, status)
-            break
+            if status in TERMINAL_STATUSES:
+                log.info("Call %s ended with status: %s", call_sid, status)
+                return status
+        except Exception as exc:
+            log.error("Error checking call status: %s", exc)
+            return "error"
 
-        time.sleep(5) 
+        time.sleep(POLL_INTERVAL)
 
-#Running through all scenarios: placing calls, waiting for completion, and then running post-call analysis on the transcripts.
-async def run_all(dry_run: bool = False, scenario_prefix: str = ""):
+
+async def run_all(dry_run: bool = False, scenario_prefix: str = "") -> None:
+    """
+    Run all test scenarios: place calls, wait for completion, analyze results.
+    
+    Args:
+        dry_run: If True, list scenarios without placing calls
+        scenario_prefix: Optional prefix to filter scenarios
+    """
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -99,27 +174,33 @@ async def run_all(dry_run: bool = False, scenario_prefix: str = ""):
 
     if dry_run:
         for s in scenarios:
-            print(f"  [{s['name']}] {s.get('goal', 'No goal specified')}")
+            print(f"[{s['name']}] {s.get('goal', 'No goal specified')}")
         return
 
-    twilio_client = TwilioClient(settings.twilio_account_sid, settings.twilio_auth_token)
-
-    results: list[dict] = []
+    twilio_client = TwilioClient(
+        settings.twilio_account_sid,
+        settings.twilio_auth_token,
+    )
 
     for i, scenario in enumerate(scenarios, start=1):
         log.info("─" * 60)
         log.info("Scenario %d/%d: %s", i, len(scenarios), scenario["name"])
         log.info("─" * 60)
 
-        #Telling the server which scenario to use for the next incoming call
+        # Writing scenario for server to load
         write_current_scenario(scenario)
 
-        #Giving the server a moment to register the new scenario file
-        await asyncio.sleep(1)
+        # Allowing server time to load scenario
+        await asyncio.sleep(SCENARIO_SETUP_DELAY)
 
-        #Placing the call and wait for it to finish
-        call_sid = place_call(twilio_client)
-        #Waiting for the call to complete, with a timeout to prevent hanging on bad scenarios
+        # Placing call and waiting for completion
+        try:
+            call_sid = place_call(twilio_client)
+        except Exception:
+            log.error("Failed to place call for scenario %s", scenario["name"])
+            continue
+
+        # Waiting for call to complete with timeout
         await asyncio.get_event_loop().run_in_executor(
             None,
             wait_for_call,
@@ -128,26 +209,35 @@ async def run_all(dry_run: bool = False, scenario_prefix: str = ""):
             settings.call_timeout_seconds,
         )
 
-        results.append({"scenario": scenario["name"], "call_sid": call_sid})
-
-       #Adding a short pause between calls to avoid overwhelming the system and to allow for any cleanup
+        # Pausing between calls to avoid overwhelming system
         if i < len(scenarios):
-            log.info("Waiting 10s before next call...")
-            await asyncio.sleep(10)
+            log.info("Waiting %.0fs before next call...", INTER_CALL_DELAY)
+            await asyncio.sleep(INTER_CALL_DELAY)
 
     log.info("All %d calls completed", len(scenarios))
 
-    #------Post-call QA analysis-----------------------------------------------------------
+    # Running post-call QA analysis
     log.info("Running QA analysis on transcripts...")
     analyzer = QAAnalyzer()
-    await analyzer.analyse_all(TRANSCRIPTS_DIR)
+    await analyzer.analyze_all(TRANSCRIPTS_DIR)
 
-    log.info("Done. Check transcripts/, reports/bug_report.md, reports/run_summary.md")
+    log.info(
+        "Done. Check transcripts/, reports/bug_report.md, reports/run_summary.md"
+    )
 
 
-#Command-line interface to allow filtering scenarios by prefix
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Voice bot test orchestrator")
+def main():
+    """CLI entry point with argument parsing."""
+    parser = argparse.ArgumentParser(
+        description="Voice bot test orchestrator",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python orchestrator.py                  Run all scenarios
+  python orchestrator.py --scenario 03    Run only scenario 03
+  python orchestrator.py --dry-run        List scenarios without calling
+        """,
+    )
     parser.add_argument(
         "--scenario",
         default="",
@@ -161,12 +251,15 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    asyncio.run(run_all(dry_run=args.dry_run, scenario_prefix=args.scenario))
+    try:
+        asyncio.run(run_all(dry_run=args.dry_run, scenario_prefix=args.scenario))
+    except KeyboardInterrupt:
+        log.info("Interrupted by user")
+        sys.exit(0)
+    except Exception as exc:
+        log.error("Orchestrator failed: %s", exc, exc_info=True)
+        sys.exit(1)
 
 
-class Orchestrator:
-    def load_scenarios(self, prefix=""):
-        return load_scenarios(prefix=prefix)
-
-    async def run_all(self, filter_id=None):
-        await run_all(scenario_prefix=filter_id or "")
+if __name__ == "__main__":
+    main()

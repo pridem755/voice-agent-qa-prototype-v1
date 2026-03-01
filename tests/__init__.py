@@ -1,2 +1,6 @@
-# This file makes 'tests/' a Python package.
-# Required for pytest to correctly resolve imports across test modules.
+"""
+Test suite for voice bot QA system.
+
+This package contains unit and integration tests for all components
+of the voice bot automated QA testing system.
+"""

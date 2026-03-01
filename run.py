@@ -1,3 +1,9 @@
+"""
+Main test runner - Orchestrates server, ngrok, and test scenarios.
+
+Starts FastAPI server, establishes ngrok tunnel for Twilio webhooks,
+and runs test scenarios via orchestrator.
+"""
 import argparse
 import asyncio
 import logging
@@ -7,37 +13,40 @@ import sys
 import threading
 import time
 from pathlib import Path
+
 import uvicorn
 from dotenv import load_dotenv
 
-#Loading environment variables from .env file before importing other modules
+# Loading environment variables before importing other modules
 load_dotenv()
 
-from orchestrator import Orchestrator
+from orchestrator import run_all
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%H:%M:%S",
 )
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
-#Port the FastAPI server listens on locally
+# Server configuration
 SERVER_PORT = int(os.getenv("PORT", 8000))
 
 
-# ---------------------------------------------------------------------------
-#Server management
-# ---------------------------------------------------------------------------
-
 def start_server_thread() -> threading.Thread:
+    """
+    Start FastAPI server in background thread.
+    
+    Returns:
+        Thread running the server
+    """
     def run():
         from server import app
         uvicorn.run(
             app,
             host="0.0.0.0",
             port=SERVER_PORT,
-            log_level="warning", 
+            log_level="warning",
             access_log=False,
         )
 
@@ -45,8 +54,17 @@ def start_server_thread() -> threading.Thread:
     thread.start()
     return thread
 
-#Waiting for the FastAPI server to be responsive before proceeding with calls
+
 def wait_for_server(timeout: int = 30) -> bool:
+    """
+    Wait for FastAPI server to be responsive.
+    
+    Args:
+        timeout: Maximum seconds to wait
+        
+    Returns:
+        True if server is ready, False if timeout
+    """
     import httpx
 
     deadline = time.time() + timeout
@@ -61,36 +79,52 @@ def wait_for_server(timeout: int = 30) -> bool:
     return False
 
 
-#---------------------------------------------------------------------------
-#ngrok tunnel management
-#---------------------------------------------------------------------------
-
 def start_ngrok(port: int) -> str:
-    #First check if the user has set a webhook URL in the environment
+    """
+    Start ngrok tunnel or use configured webhook URL.
+    
+    Args:
+        port: Local port to tunnel
+        
+    Returns:
+        Public HTTPS URL for webhooks
+    """
+    # Checking for configured webhook URL
     if os.getenv("WEBHOOK_BASE_URL"):
         url = os.getenv("WEBHOOK_BASE_URL")
-        logger.info(f"Using configured webhook URL: {url}")
+        log.info("Using configured webhook URL: %s", url)
         return url
 
     try:
-        #Try using pyngrok if available for better control and reliability
+        # Attempting pyngrok for better control
         from pyngrok import ngrok as pyngrok
         tunnel = pyngrok.connect(port, "http")
         public_url = tunnel.public_url.replace("http://", "https://")
-        logger.info(f"ngrok tunnel: {public_url}")
+        log.info("ngrok tunnel: %s", public_url)
         return public_url
 
     except ImportError:
-        #Fall back to ngrok CLI
-        logger.info("pyngrok not found — trying ngrok CLI")
+        # Falling back to ngrok CLI
+        log.info("pyngrok not found — trying ngrok CLI")
         return _start_ngrok_cli(port)
 
 
 def _start_ngrok_cli(port: int) -> str:
-    """Starting ngrok via CLI and parse the public URL from its API."""
+    """
+    Start ngrok via CLI and parse public URL.
+    
+    Args:
+        port: Local port to tunnel
+        
+    Returns:
+        Public HTTPS URL
+        
+    Raises:
+        RuntimeError: If ngrok fails to start
+    """
     import httpx
 
-    #Starting ngrok in background
+    # Starting ngrok in background
     proc = subprocess.Popen(
         ["ngrok", "http", str(port), "--log=stdout"],
         stdout=subprocess.DEVNULL,
@@ -105,26 +139,27 @@ def _start_ngrok_cli(port: int) -> str:
             for t in tunnels:
                 if t.get("proto") == "https":
                     url = t["public_url"]
-                    logger.info(f"ngrok tunnel: {url}")
+                    log.info("ngrok tunnel: %s", url)
                     return url
         except Exception:
             time.sleep(1)
 
     proc.kill()
     raise RuntimeError(
-        "ngrok failed to start. Install ngrok from https://ngrok.com/download "
+        "ngrok failed to start. Please ensure ngrok is installed and in your PATH, "
         "or set WEBHOOK_BASE_URL in your .env file."
     )
 
 
-# ---------------------------------------------------------------------------
-# Pre-flight checks
-# ---------------------------------------------------------------------------
-
-#Running pre-flight checks to ensure all required environment variables and scenario files are present 
 def run_preflight_checks() -> None:
+    """
+    Validate environment and scenario files before running.
+    
+    Exits with error code if critical requirements are missing.
+    """
     errors = []
 
+    # Checking required environment variables
     required_env = [
         "OPENAI_API_KEY",
         "DEEPGRAM_API_KEY",
@@ -136,6 +171,7 @@ def run_preflight_checks() -> None:
         if not os.getenv(var):
             errors.append(f"Missing environment variable: {var}")
 
+    # Checking for scenario files
     scenario_files = list(Path("scenarios").glob("scenario_*.json"))
     if not scenario_files:
         errors.append(
@@ -148,63 +184,62 @@ def run_preflight_checks() -> None:
             print(f"  - {err}")
         print(
             "\nFix the above issues and try again.\n"
-            "See .env.example for required variables.\n"
         )
         sys.exit(1)
 
-    logger.info(f"Preflight OK — {len(scenario_files)} scenario(s) ready")
+    log.info("Preflight OK — %d scenario(s) ready", len(scenario_files))
 
-
-#---------------------------------------------------------------------------
-#Main
-#---------------------------------------------------------------------------
 
 async def main(scenario_filter: str = None, dry_run: bool = False):
-    """Main async entrypoint."""
-
-    #Validating config before doing anything
+    """
+    Main async entry point.
+    
+    Args:
+        scenario_filter: Optional scenario prefix filter
+        dry_run: If True, list scenarios without running
+    """
+    # Validating configuration
     run_preflight_checks()
 
     if dry_run:
-        orch = Orchestrator()
-        scenarios = orch.load_scenarios()
+        from orchestrator import load_scenarios
+        scenarios = load_scenarios()
         print("\nAvailable scenarios:")
         for s in scenarios:
-            print(f"  [{s['id']}] {s['name']}")
+            print(f"  [{s.get('id', '??')}] {s['name']}")
         return
 
-    #Starting the FastAPI webhook server
-    logger.info("Starting FastAPI server...")
+    # Starting FastAPI webhook server
+    log.info("Starting FastAPI server...")
     start_server_thread()
     if not wait_for_server():
-        logger.error("FastAPI server failed to start within 30s")
+        log.error("FastAPI server failed to start within 30s")
         sys.exit(1)
-    logger.info(f"Server ready on port {SERVER_PORT}")
+    log.info("Server ready on port %d", SERVER_PORT)
 
-    #Starting ngrok tunnel so Twilio can reach us
-    logger.info("Starting ngrok tunnel...")
+    # Starting ngrok tunnel for Twilio webhooks
+    log.info("Starting ngrok tunnel...")
     public_url = start_ngrok(SERVER_PORT)
     os.environ["WEBHOOK_BASE_URL"] = public_url
-    logger.info(f"Public webhook URL: {public_url}")
+    log.info("Public webhook URL: %s", public_url)
 
-    #Brief pause to ensure everything is settled before calls start
+    # Allowing services to settle
     await asyncio.sleep(2)
 
-    #Running the test scenarios
-    orch = Orchestrator()
-    await orch.run_all(filter_id=scenario_filter)
+    # Running test scenarios
+    await run_all(scenario_prefix=scenario_filter or "")
 
-    logger.info("Test run complete. Check reports/ for results.")
+    log.info("Test run complete. Check reports/ for results.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="PrettyGood AI Assessment Test Runner",
+        description="Voice bot test runner",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python run.py                  Run all 12 scenarios
-  python run.py --scenario 07    Run only the emergency scenario
+  python run.py                  Run all scenarios
+  python run.py --scenario 03    Run only scenario 03
   python run.py --dry-run        List scenarios without calling
         """,
     )
@@ -212,8 +247,8 @@ Examples:
         "--scenario",
         type=str,
         default=None,
-        metavar="ID",
-        help="Run a specific scenario by ID (e.g. '01', '07')",
+        metavar="PREFIX",
+        help="Run specific scenario by prefix (e.g. '01', '03')",
     )
     parser.add_argument(
         "--dry-run",
@@ -222,4 +257,11 @@ Examples:
     )
     args = parser.parse_args()
 
-    asyncio.run(main(scenario_filter=args.scenario, dry_run=args.dry_run))
+    try:
+        asyncio.run(main(scenario_filter=args.scenario, dry_run=args.dry_run))
+    except KeyboardInterrupt:
+        log.info("Interrupted by user")
+        sys.exit(0)
+    except Exception as exc:
+        log.error("Fatal error: %s", exc, exc_info=True)
+        sys.exit(1)

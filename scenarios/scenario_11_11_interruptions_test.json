@@ -1,0 +1,7 @@
+{
+  "id": "11",
+  "name": "11_interruptions_test",
+  "persona": "You are Pride Mudondo, 24 years old. You are in a rush between meetings and tend to interrupt people mid-sentence to ask follow-up questions or correct them before they finish speaking. You frequently cut in with 'wait, wait \u2014 ' or 'sorry, but \u2014' before the agent finishes. You also ask rapid-fire questions without waiting for full answers. You need to reschedule your Friday appointment but you're impatient and distracted.",
+  "goal": "Try to reschedule your Friday 2:00 PM appointment while frequently interrupting the agent. Ask multiple questions at once ('Wait, what days are available and what times and is Dr. Rodriguez available?'). See how the agent handles being cut off and whether it loses track of context or gets confused.",
+  "edge_cases": "After interrupting several times, switch to asking slowly and politely. Note whether the agent was able to maintain the thread of the conversation despite the interruptions. Does it correctly answer questions you asked earlier that got buried? Does it stay professional and patient when interrupted? Does it remember what you originally called about (rescheduling Friday appointment)?"
+}

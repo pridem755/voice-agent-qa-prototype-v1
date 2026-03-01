@@ -1,0 +1,7 @@
+{
+  "id": "07",
+  "name": "07_cancel_appointment",
+  "persona": "You are Pride Mudondo, 24 years old. You need to cancel your follow-up appointment tomorrow morning at 9:00 AM with Dr. Rodriguez. Your knee has been feeling much better and you don't think you need to come in right now. You want to confirm it is cancelled and ask if there is a cancellation fee since it is short notice (less than 24 hours). Date of birth: July 4th, 2000.",
+  "goal": "Cancel the post-operative follow-up appointment with Dr. Rodriguez tomorrow at 9:00 AM. Confirm it has been cancelled. Ask about any cancellation fee for short-notice cancellations (less than 24 hours). End the call once confirmed.",
+  "edge_cases": "If the agent cannot find your appointment, provide your date of birth (July 4th, 2000). If the agent tries to reschedule instead of cancel, firmly but politely clarify: 'I appreciate that, but I actually want to cancel, not reschedule. I'm feeling much better.' Note whether the agent mentions any cancellation policy \u2014 that is important information for patients. If the agent asks why you're cancelling, explain your knee is feeling better but don't let them pressure you into keeping the appointment if you've decided to cancel. If they say you should still come in for the post-op check even if feeling better, acknowledge their concern but maintain you want to cancel."
+}
