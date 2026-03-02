@@ -1,15 +1,8 @@
-"""
-Integration tests for voice bot QA system.
-
-Tests multiple components working together: CallRecorder + QAAnalyzer,
-PatientBrain + CallRecorder, and end-to-end workflows.
-"""
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from call_recorder import CallRecorder
 from patient_brain import PatientBrain
 from qa_analyzer import QAAnalyzer
-
 
 def mock_openai(reply: str):
     """
@@ -224,11 +217,11 @@ class TestEndToEndWorkflow:
         monkeypatch,
         mock_openai_analysis_response,
     ):
-        """Testing full record → save → analyze workflow."""
+        """Testing full record - save - analyze workflow."""
         monkeypatch.chdir(tmp_path)
         (tmp_path / "reports").mkdir()
         
-        # Step 1: Record conversation
+        #Recording conversation
         recorder = CallRecorder("workflow_test")
         recorder.add_turn("agent", "How can I help?")
         recorder.add_turn("patient", "I need an appointment on Sunday")
@@ -236,12 +229,12 @@ class TestEndToEndWorkflow:
         
         transcript_path = recorder.save()
         
-        # Step 2: Analyze transcript
+        #Analyziong transcript
         analyzer = QAAnalyzer()
         analyzer._client = mock_openai_analysis_response
         
         analysis = await analyzer.analyze_transcript(transcript_path)
         
-        # Step 3: Verify analysis was performed
+        #Verifying analysis was performed
         assert len(analysis) > 0
         assert isinstance(analysis, str)

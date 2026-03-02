@@ -1,13 +1,5 @@
-"""
-Patient brain - Manages patient side of conversation.
-
-Uses GPT-4 to roleplay as a patient calling a medical office, generating
-natural responses based on scenario goals and conversation history.
-"""
 import logging
-
 from openai import AsyncOpenAI
-
 from config import settings
 
 log = logging.getLogger(__name__)
@@ -172,6 +164,7 @@ Patient: "Monday through Thursday next week."(5 words)
     "Just to confirm, that's Wednesday at 4 PM?"
 
 **Absolute Rules:**
+-NEVER ask the agent to repeat themselves more than 3 times in a call. After that, say "Okay, I'll try again later" and append {hangup_token}.
 - NEVER break character or mention you are an AI
 - NEVER repeat yourself word-for-word across multiple turns
 - NEVER say "mm-hmm" or "okay" after every single response

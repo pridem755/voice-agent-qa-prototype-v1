@@ -1,9 +1,3 @@
-"""
-Pytest configuration and shared fixtures.
-
-Provides reusable fixtures for testing the voice bot QA system,
-including mock API clients, sample data, and temporary directories.
-"""
 import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock

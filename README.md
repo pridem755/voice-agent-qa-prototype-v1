@@ -20,7 +20,7 @@ During the call, the patient brain module uses GPT-4 to roleplay as the patient.
 
 All conversations are transcribed using Deepgram for speech-to-text, and the patient's responses are converted back to speech using ElevenLabs text-to-speech before being sent to the agent.
 
-Every conversation turn is recorded with timestamps, creating a complete transcript of the call. After all test scenarios complete, GPT-4 analyzes each transcript to identify bugs, categorize them by severity, and provide specific recommendations for improvement.
+Every conversation turn is recorded with timestamps, creating a complete transcript of the call. After all test scenarios complete, GPT-4 analyzes each transcript to identify potential bugs, categorize them by severity, and provide specific recommendations for improvement.
 
 ## Prerequisites
 
@@ -101,6 +101,9 @@ Open the .env file in a text editor and add your credentials. Here's what each v
 - CALL_TIMEOUT_SECONDS: Maximum duration for each call in seconds, default is 600
 - MAX_TURNS: Maximum conversation turns before forcing a hang-up, default is 40
 
+**Config file**
+-do not forget to place the target_phone_contacts which is called for testing
+
 Generate the test scenario files:
 
 ```bash
@@ -135,7 +138,7 @@ python run.py --dry-run
 
 ## Understanding the Output
 
-After the tests complete, you'll find several output directories:
+After the tests complete (all scenarios run), you'll find several output directories:
 
 The transcripts directory contains text files for each call. These files show the full conversation with timestamps, speaker labels, and metadata like call duration. Each transcript is named with the scenario name and timestamp.
 

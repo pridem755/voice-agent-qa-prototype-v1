@@ -1,9 +1,3 @@
-"""
-Tests for call_recorder module.
-
-Tests the CallRecorder class for recording conversation turns,
-saving transcripts, and managing call metadata.
-"""
 import time
 from pathlib import Path
 import pytest

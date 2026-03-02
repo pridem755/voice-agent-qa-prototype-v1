@@ -1,9 +1,3 @@
-"""
-Main test runner - Orchestrates server, ngrok, and test scenarios.
-
-Starts FastAPI server, establishes ngrok tunnel for Twilio webhooks,
-and runs test scenarios via orchestrator.
-"""
 import argparse
 import asyncio
 import logging
@@ -13,7 +7,6 @@ import sys
 import threading
 import time
 from pathlib import Path
-
 import uvicorn
 from dotenv import load_dotenv
 
@@ -35,7 +28,7 @@ SERVER_PORT = int(os.getenv("PORT", 8000))
 
 def start_server_thread() -> threading.Thread:
     """
-    Start FastAPI server in background thread.
+    Starting FastAPI server in background thread.
     
     Returns:
         Thread running the server
@@ -57,7 +50,7 @@ def start_server_thread() -> threading.Thread:
 
 def wait_for_server(timeout: int = 30) -> bool:
     """
-    Wait for FastAPI server to be responsive.
+    Waiting for FastAPI server to be responsive.
     
     Args:
         timeout: Maximum seconds to wait
@@ -81,7 +74,7 @@ def wait_for_server(timeout: int = 30) -> bool:
 
 def start_ngrok(port: int) -> str:
     """
-    Start ngrok tunnel or use configured webhook URL.
+    Starting ngrok tunnel or use configured webhook URL.
     
     Args:
         port: Local port to tunnel
@@ -111,7 +104,7 @@ def start_ngrok(port: int) -> str:
 
 def _start_ngrok_cli(port: int) -> str:
     """
-    Start ngrok via CLI and parse public URL.
+    Starting ngrok via CLI and parse public URL.
     
     Args:
         port: Local port to tunnel

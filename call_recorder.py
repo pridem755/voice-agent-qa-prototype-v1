@@ -1,9 +1,3 @@
-"""
-Call recording and transcript management.
-
-Handles recording of call transcripts with speaker turns, timestamps,
-and metadata. Saves transcripts in human-readable format.
-"""
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -18,7 +12,7 @@ class CallRecorder:
     
     def __init__(self, scenario_name: str):
         """
-        Initialize call recorder for a specific scenario.
+        Initializing call recorder for a specific scenario.
         """
         self._scenario_name = scenario_name
         self._started_at = datetime.now()
@@ -29,7 +23,7 @@ class CallRecorder:
 
     def add_turn(self, speaker: str, text: str) -> None:
         """
-        Add a conversation turn to the transcript.
+        Adding a conversation turn to the transcript.
         
         Args:
             speaker: Speaker identifier (agent/patient)
@@ -45,7 +39,7 @@ class CallRecorder:
 
     def save(self) -> Path:
         """
-        Save transcript to disk with metadata.
+        Saving transcript to disk with metadata.
         
         Returns:
             Path to saved transcript file
@@ -81,7 +75,7 @@ class CallRecorder:
         for turn in self._turns:
             # Formatting elapsed time as [MM:SS]
             m = int(turn["elapsed"]) // 60
-            s = int(turn["elapsed"]) % 60
+            s= int(turn["elapsed"]) % 60
             timestamp_label = f"[{m:02d}:{s:02d}]"
             speaker_label = turn["speaker"].ljust(7)
             lines.append(f"{timestamp_label} {speaker_label}: {turn['text']}")

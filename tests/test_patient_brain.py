@@ -1,9 +1,3 @@
-"""
-Tests for patient_brain module.
-
-Tests the PatientBrain class for generating patient responses
-using GPT-4 based on scenario definitions.
-"""
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from patient_brain import PatientBrain

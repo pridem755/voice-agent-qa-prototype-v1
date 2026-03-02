@@ -1,9 +1,3 @@
-"""
-Tests for qa_analyzer module.
-
-Tests the QAAnalyzer class for analyzing transcripts and generating
-bug reports using GPT-4.
-"""
 from pathlib import Path
 import pytest
 from qa_analyzer import QAAnalyzer

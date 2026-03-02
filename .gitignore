@@ -1,27 +1,49 @@
-# ── Secrets ───────────────────────────────────────────────────
+# =========================
+# Environment variables
+# =========================
 .env
+.env.*
+*.env
 
-# ── Runtime files ─────────────────────────────────────────────
+# =========================
+# Reports & generated files
+# =========================
+reports/
+transcripts/
 current_scenario.json
+
+# =========================
+# Scenario files (local test configs)
+# =========================
+scenarios/
+
+# =========================
+# Python
+# =========================
 __pycache__/
-*.py[cod]
+*.pyc
 *.pyo
-.pytest_cache/
+*.pyd
+*.sqlite3
 
-# ── Output directories (generated at runtime) ─────────────────
-# Commit these directories but not their contents
-transcripts/*
-recordings/*
-reports/*
-!transcripts/.gitkeep
-!recordings/.gitkeep
-!reports/.gitkeep
-
-# ── Python env ────────────────────────────────────────────────
+# Virtual environments
 venv/
 .venv/
 env/
 
-# ── OS ────────────────────────────────────────────────────────
+# =========================
+# OS files
+# =========================
 .DS_Store
 Thumbs.db
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/

@@ -1,9 +1,3 @@
-"""
-Speech processing pipeline for voice bot.
-
-Handles bidirectional audio streaming between Twilio, Deepgram, and ElevenLabs.
-Manages transcription, end-of-speech detection, and text-to-speech conversion.
-"""
 import asyncio
 import audioop
 import base64
@@ -14,6 +8,7 @@ from dataclasses import dataclass
 from typing import AsyncGenerator, Optional
 import httpx
 import miniaudio
+import webrtcvad
 from deepgram import (
     DeepgramClient,
     DeepgramClientOptions,
@@ -29,7 +24,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class SpeechEndSignal:
     """Signal indicating speech end detection status."""
-    silence_duration: float
+    post_hangover_silence: float
     has_final_transcript: bool
     transcript_text: str
     confidence: str
@@ -37,183 +32,269 @@ class SpeechEndSignal:
 
 class AdaptiveEndOfSpeechDetector:
     """
-    Detects when speaker has finished talking.
+    Detecting when speaker has finished talking using VAD.
     
-    Uses silence duration and transcript finality to determine
-    speech end with varying confidence levels (low/medium/high/certain).
     """
     
-    # Detection thresholds (class constants)
-    MIN_SILENCE_WITH_FINAL = 1.5 
-    MIN_SILENCE_NO_FINAL = 3.5    
-    MAX_WAIT = 8.0                
-    MEDIUM_CONFIDENCE_THRESHOLD = 1.0 
+    # Detection thresholds
+    MAX_WAIT = 10.0
     
     def __init__(self) -> None:
-        """Initialize detector with clean state."""
-        self.last_speech_time = 0.0
+        """Initializing detector with VAD and clean state."""
+        # Transcript state
         self.has_final_transcript = False
         self.current_transcript = ""
         
-    def on_audio_received(self) -> None:
-        """Update timestamp when audio is received."""
-        self.last_speech_time = time.time()
+        # VAD configuration for 8kHz telephony
+        self.vad = webrtcvad.Vad(2)  
+        self.frame_duration_ms = 20
+        self.frame_size = int(8000 * self.frame_duration_ms / 1000) * 2  
+        
+        # VAD state tracking
+        self.pcm_buffer = bytearray()
+        self.consecutive_silence_frames = 0
+        
+        # Hangover configuration
+        self.hangover_frames = int(250 / self.frame_duration_ms)  # 250ms
+        
+        # Post-hangover silence threshold
+        self.post_hangover_silence_frames = int(1200 / self.frame_duration_ms)  # 1.2s
+        
+        # Timing
+        self.post_hangover_silence_start = None
+        self.last_speech_time = None  # Track when speech was last detected
+    
+    def process_vad_frame(self, mulaw_bytes: bytes) -> None:
+        """Processing audio through VAD to detect speech vs silence."""
+        try:
+            pcm_bytes = audioop.ulaw2lin(mulaw_bytes, 2)
+        except Exception as exc:
+            log.debug("Failed to convert mulaw: %s", exc)
+            return
+        
+        self.pcm_buffer.extend(pcm_bytes)
+        
+        while len(self.pcm_buffer) >= self.frame_size:
+            frame = bytes(self.pcm_buffer[:self.frame_size])
+            self.pcm_buffer = self.pcm_buffer[self.frame_size:]
+            
+            try:
+                is_speech = self.vad.is_speech(frame, 8000)
+            except Exception as exc:
+                log.debug("VAD error: %s", exc)
+                continue
+            
+            if is_speech:
+                self.consecutive_silence_frames = 0
+                self.post_hangover_silence_start = None
+                self.last_speech_time = time.time()  # Update speech timestamp
+            else:
+                self.consecutive_silence_frames += 1
+                
+                if self.consecutive_silence_frames > self.hangover_frames:
+                    if self.post_hangover_silence_start is None:
+                        self.post_hangover_silence_start = time.time()
     
     def on_transcript(self, text: str, is_final: bool) -> None:
-        """
-        Process transcript from Deepgram.
-        
-        Args:
-            text: Transcribed text
-            is_final: Whether Deepgram marked this as final
-        """
+        """Processing transcript from Deepgram."""
         self.current_transcript = text
+        
         if is_final:
             self.has_final_transcript = True
-            log.debug("Final transcript: %s", text)
+            log.debug("Final: %s", text)
         else:
-            log.debug("Partial transcript: %s", text)
+            log.debug("Partial: %s", text)
     
-    def get_silence_duration(self) -> float:
-        """Calculate seconds of silence since last audio."""
-        return time.time() - self.last_speech_time
+    def speech_detected_recently(self, threshold_seconds: float = 0.5) -> bool:
+        """
+        Check if speech was detected recently (for barge-in detection).
+        
+        Args:
+            threshold_seconds: How recently to consider as "recent" (default 0.5s)
+        Returns:
+            True if speech detected within threshold
+        """
+        if self.last_speech_time is None:
+            return False
+        return (time.time() - self.last_speech_time) < threshold_seconds
+    
+    def get_post_hangover_silence(self) -> float:
+        """Getting duration of silence AFTER hangover period."""
+        if self.post_hangover_silence_start is None:
+            return 0.0
+        return time.time() - self.post_hangover_silence_start
+    
+    def is_in_hangover(self) -> bool:
+        """Checking if currently in hangover period."""
+        return 0 < self.consecutive_silence_frames <= self.hangover_frames
+    
+    def get_post_hangover_frames(self) -> int:
+        """Getting number of silence frames AFTER hangover."""
+        if self.consecutive_silence_frames <= self.hangover_frames:
+            return 0
+        return self.consecutive_silence_frames - self.hangover_frames
     
     def is_speech_ended(self) -> SpeechEndSignal:
-        """
-        Check if speech has ended based on silence and transcript state.
+        """Checking if speech has ended based on current VAD state."""
+        post_hangover_silence = self.get_post_hangover_silence()
+        post_hangover_frames = self.get_post_hangover_frames()
         
-        Returns:
-            SpeechEndSignal with confidence level and metadata
-        """
-        silence = self.get_silence_duration()
-        
-        # High confidence: final transcript + sufficient silence
-        if self.has_final_transcript and silence >= self.MIN_SILENCE_WITH_FINAL:
+        if self.is_in_hangover():
             return SpeechEndSignal(
-                silence_duration=silence,
-                has_final_transcript=True,
+                post_hangover_silence=0.0,
+                has_final_transcript=self.has_final_transcript,
                 transcript_text=self.current_transcript,
-                confidence="certain",
+                confidence="low",
             )
         
-        # High confidence: long silence even without final
-        if silence >= self.MIN_SILENCE_NO_FINAL:
+        silence_threshold_met = post_hangover_frames >= self.post_hangover_silence_frames
+        
+        if self.has_final_transcript and silence_threshold_met:
             return SpeechEndSignal(
-                silence_duration=silence,
-                has_final_transcript=self.has_final_transcript,
+                post_hangover_silence=post_hangover_silence,
+                has_final_transcript=True,
                 transcript_text=self.current_transcript,
                 confidence="high",
             )
-        
-        # Medium confidence: moderate silence
-        if silence >= self.MEDIUM_CONFIDENCE_THRESHOLD:
+
+        if silence_threshold_met and self.current_transcript.strip():
             return SpeechEndSignal(
-                silence_duration=silence,
-                has_final_transcript=self.has_final_transcript,
+                post_hangover_silence=post_hangover_silence,
+                has_final_transcript=False,
                 transcript_text=self.current_transcript,
                 confidence="medium",
             )
         
-        # Low confidence: still speaking
         return SpeechEndSignal(
-            silence_duration=silence,
+            post_hangover_silence=post_hangover_silence,
             has_final_transcript=self.has_final_transcript,
             transcript_text=self.current_transcript,
             confidence="low",
         )
     
     def reset_for_new_turn(self) -> None:
-        """Reset state for next conversation turn."""
+        """Resetting state for next conversation turn."""
         self.has_final_transcript = False
         self.current_transcript = ""
-
+        self.consecutive_silence_frames = 0
+        self.post_hangover_silence_start = None
+        self.last_speech_time = None
+        self.pcm_buffer.clear()
 
 class SpeechPipeline:
-    """
-    Manages bidirectional audio streaming pipeline.
+    """Managing bidirectional audio streaming pipeline."""
     
-    Handles:
-    - Audio streaming to Deepgram for transcription
-    - End-of-speech detection
-    - Text-to-speech via ElevenLabs
-    - Audio encoding/decoding for Twilio
-    """
-    
-    # Audio configuration constants
+    # Audio configuration
     SAMPLE_RATE = 8000
     CHANNELS = 1
     ENCODING = "mulaw"
     CHUNK_SIZE = 160
-    AUDIO_BUFFER_DELAY = 2.0
+    AUDIO_BUFFER_DELAY = 1.5
     
     # Deepgram configuration
     DG_MODEL = "nova-2"
     DG_LANGUAGE = "en-US"
-    DG_ENDPOINTING = 3000
+    DG_ENDPOINTING = 1500
     
     # Transcript validation
     MIN_TRANSCRIPT_LENGTH = 3
     
     # Detection timing
-    SPEECH_END_CHECK_INTERVAL = 0.3
+    SPEECH_END_CHECK_INTERVAL = 0.1
+    
+    # Operational limits
+    MAX_QUEUE_SIZE = 10
+    DEEPGRAM_SEND_TIMEOUT = 1.0
     
     def __init__(self) -> None:
-        """Initialize speech pipeline with Deepgram client."""
-        self._utterance_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=0)
+        """Initializing speech pipeline."""
+        self._utterance_queue: asyncio.Queue[str] = asyncio.Queue(maxsize=self.MAX_QUEUE_SIZE)
         self._deepgram_connection = None
         self._closed = False
         self._is_speaking = False
         
+        # Single-flight guard for queueing 
+        self._queue_lock = asyncio.Lock()
+        self._latest_queue_id = -1  
+        self._next_queue_id = 0  
+        
+        # Single active wait task
+        self._active_wait_task: Optional[asyncio.Task] = None
+        
+        # Fallback monitor
+        self._monitor_task: Optional[asyncio.Task] = None
+        self._last_partial_check = 0.0
+        
+        # Barge-in tracking
+        self._tts_started_at = None
         self.end_detector = AdaptiveEndOfSpeechDetector()
-
         self._dg_client = DeepgramClient(
             settings.deepgram_api_key,
             config=DeepgramClientOptions(options={"keepalive": "true"}),
         )
 
     async def listen(self) -> None:
-        """
-        Start listening for audio via Deepgram.
-        
-        Sets up WebSocket connection with event handlers for transcripts,
-        errors, and connection closure.
-        """
+        """Starting listening for audio via Deepgram."""
         self._deepgram_connection = self._dg_client.listen.asynclive.v("1")
 
-        # Deepgram event handlers (nested functions with closure)
         async def on_transcript(self_dg, result, **kwargs):
-            """Handle transcript events from Deepgram."""
+            """Handling transcript events from Deepgram."""
             try:
                 transcript = result.channel.alternatives[0].transcript
                 is_final = result.is_final
                 
-                if transcript.strip():
-                    self.end_detector.on_transcript(transcript, is_final)
+                if not transcript.strip():
+                    return
+                
+                # Update detector state
+                self.end_detector.on_transcript(transcript, is_final)
+                
+                # Trigger wait on substantial final transcripts
+                if is_final and len(transcript.strip()) > self.MIN_TRANSCRIPT_LENGTH:
+                    # Cancel previous wait (non-blocking)
+                    if self._active_wait_task and not self._active_wait_task.done():
+                        self._active_wait_task.cancel()
                     
-                    # Only queue substantial final transcripts
-                    if is_final and len(transcript.strip()) > self.MIN_TRANSCRIPT_LENGTH:
-                        log.debug("Deepgram final transcript: %s", transcript)
-                        await self._wait_for_speech_end()
-                        await self._utterance_queue.put(transcript)
+                    log.debug("Final: %s - starting wait", transcript)
+                    
+                    # Generate unique ID for this queue attempt
+                    queue_id = self._next_queue_id
+                    self._next_queue_id += 1
+                    
+                    # Start new wait with frozen transcript and ID
+                    self._active_wait_task = asyncio.create_task(
+                        self._wait_and_queue_utterance(transcript, queue_id)
+                    )
                         
             except (AttributeError, IndexError) as exc:
                 log.warning("Malformed Deepgram event: %s", exc)
 
         async def on_error(self_dg, error, **kwargs):
-            """Handle error events from Deepgram."""
+            """Handling error events from Deepgram."""
             log.error("Deepgram error: %s", error)
 
         async def on_close(self_dg, close, **kwargs):
-            """Handle connection close events."""
+            """Handling connection close events."""
             log.info("Deepgram connection closed")
-            await self._utterance_queue.put(None)
+            
+            # Cancel background tasks
+            if self._active_wait_task:
+                self._active_wait_task.cancel()
+            if self._monitor_task:
+                self._monitor_task.cancel()
+            
+            # Signal shutdown (non-blocking)
+            try:
+                self._utterance_queue.put_nowait(None)
+            except asyncio.QueueFull:
+                log.warning("Queue full during shutdown, draining...")
 
-        # Registering event handlers
+        # Register handlers
         self._deepgram_connection.on(LiveTranscriptionEvents.Transcript, on_transcript)
         self._deepgram_connection.on(LiveTranscriptionEvents.Error, on_error)
         self._deepgram_connection.on(LiveTranscriptionEvents.Close, on_close)
 
-        # Configuring Deepgram options
+        # Configure Deepgram
         options = LiveOptions(
             model=self.DG_MODEL,
             language=self.DG_LANGUAGE,
@@ -226,49 +307,130 @@ class SpeechPipeline:
         )
         
         await self._deepgram_connection.start(options)
+        
+        # Start fallback monitor
+        self._monitor_task = asyncio.create_task(self._monitor_partial_transcripts())
+    
+    async def _monitor_partial_transcripts(self) -> None:
+        """Monitoring for Deepgram stalls - trigger fallback if VAD says done but no final."""
+        try:
+            while not self._closed:
+                await asyncio.sleep(1.0)
+                
+                # Skip if recently checked, speaking, or already waiting
+                now = time.time()
+                if (now - self._last_partial_check < 2.0 or 
+                    self._is_speaking or 
+                    (self._active_wait_task and not self._active_wait_task.done())):
+                    continue
+                
+                signal = self.end_detector.is_speech_ended()
+                
+                if signal.confidence == "medium" and signal.transcript_text.strip():
+                    self._last_partial_check = now
+                    
+                    log.info("Fallback: Deepgram stalled, using partial '%s'", signal.transcript_text[:30])
+                    
+                    queue_id = self._next_queue_id
+                    self._next_queue_id += 1
+                    
+                    self._active_wait_task = asyncio.create_task(
+                        self._wait_and_queue_utterance(signal.transcript_text, queue_id)
+                    )
+                        
+        except asyncio.CancelledError:
+            log.debug("Monitor cancelled")
+    
+    async def _wait_and_queue_utterance(self, utterance_snapshot: str, queue_id: int) -> None:
+        """
+        Waiting for VAD confirmation and queue the utterance (single-flight).
+        
+        Args:
+            utterance_snapshot: Frozen transcript from when wait was triggered
+            queue_id: Monotonic ID for this queue attempt
+        """
+        try:
+            log.debug(f"Wait #{queue_id} started for: {utterance_snapshot[:30]}")
+            
+            # Wait for VAD confirmation
+            await self._wait_for_speech_end()
+            
+            # Single-flight guard: only latest queue_id wins
+            async with self._queue_lock:
+                # Only queue if this is newer than what was already queued
+                if queue_id <= self._latest_queue_id:
+                    log.debug(f"Wait #{queue_id} stale (latest={self._latest_queue_id}), skipping")
+                    return
+                
+                # Queue the snapshot
+                if utterance_snapshot and len(utterance_snapshot.strip()) > self.MIN_TRANSCRIPT_LENGTH:
+                    try:
+                        await asyncio.wait_for(
+                            self._utterance_queue.put(utterance_snapshot),
+                            timeout=1.0
+                        )
+                        
+                        # Update latest queued ID
+                        self._latest_queue_id = queue_id
+                        
+                        log.info(f"Wait #{queue_id} queued: {utterance_snapshot}")
+                        
+                    except asyncio.TimeoutError:
+                        log.error(f"Wait #{queue_id} queue.put() timed out - downstream slow")
+                else:
+                    log.warning(f"Wait #{queue_id} snapshot too short")
+                
+        except asyncio.CancelledError:
+            log.debug(f"Wait #{queue_id} cancelled")
+            raise
     
     async def _wait_for_speech_end(self) -> None:
-        """
-        Wait for speech to end based on adaptive detection.
-        
-        Polls end detector until high/certain confidence or timeout.
-        """
+        """Waiting for VAD to confirm speech has ended."""
         max_wait = self.end_detector.MAX_WAIT
         wait_start = time.time()
+        
+        await asyncio.sleep(0.05)
         
         while time.time() - wait_start < max_wait:
             signal = self.end_detector.is_speech_ended()
             
-            if signal.confidence in ["high", "certain"]:
+            # Accept HIGH or MEDIUM confidence
+            if signal.confidence in ["high", "medium"]:
                 log.info(
-                    "Speech ended (%s, %.1fs silence)",
+                    "Speech ended [%s, %.2fs post-hangover, %d frames]",
                     signal.confidence,
-                    signal.silence_duration,
+                    signal.post_hangover_silence,
+                    self.end_detector.get_post_hangover_frames(),
                 )
                 return
             
             await asyncio.sleep(self.SPEECH_END_CHECK_INTERVAL)
         
-        log.warning("Max wait exceeded - responding anyway")
+        log.warning("Timeout after %.1fs", max_wait)
 
     async def feed_audio(self, mulaw_bytes: bytes) -> None:
         """
-        Feed audio to Deepgram (only when not speaking).
+        Feeding audio to Deepgram and VAD.
         
-        Args:
-            mulaw_bytes: Raw mulaw-encoded audio from Twilio
         """
-        if self._deepgram_connection and not self._closed and not self._is_speaking:
-            self.end_detector.on_audio_received()
-            await self._deepgram_connection.send(mulaw_bytes)
+        if self._deepgram_connection and not self._closed:
+            # Always process VAD
+            self.end_detector.process_vad_frame(mulaw_bytes)
+            
+            # Only send to Deepgram when NOT speaking
+            if not self._is_speaking:
+                try:
+                    await asyncio.wait_for(
+                        self._deepgram_connection.send(mulaw_bytes),
+                        timeout=self.DEEPGRAM_SEND_TIMEOUT
+                    )
+                except asyncio.TimeoutError:
+                    log.error("Deepgram send timeout - websocket may be stalled")
+                except Exception as exc:
+                    log.error("Deepgram send failed: %s", exc)
 
     async def utterances(self) -> AsyncGenerator[str, None]:
-        """
-        Async generator yielding complete user utterances.
-        
-        Yields:
-            Transcribed text from Deepgram
-        """
+        """Async generator yielding complete user utterances."""
         while True:
             item = await self._utterance_queue.get()
             if item is None:
@@ -281,26 +443,16 @@ class SpeechPipeline:
         websocket,
         stream_sid: Optional[str],
     ) -> None:
-        """
-        Convert text to speech and send to Twilio.
-        
-        Args:
-            text: Text to speak
-            websocket: WebSocket connection to Twilio
-            stream_sid: Twilio stream identifier
-        """
+        """Convert text to speech and send to Twilio."""
         if not text.strip():
             return
 
         self._is_speaking = True
-        log.info("Speaking to stream_sid: %s, text: %s...", stream_sid, text[:50])
+        self._tts_started_at = time.time()
+        log.info("Speaking: %s... (%d chars)", text[:50], len(text))
 
         try:
-            # Getting TTS audio from ElevenLabs
             mp3_bytes = await self._elevenlabs_tts(text)
-            log.info("TTS returned %d bytes", len(mp3_bytes))
-
-            # Decoding MP3 to PCM
             decoded = miniaudio.decode(
                 mp3_bytes,
                 output_format=miniaudio.SampleFormat.SIGNED16,
@@ -309,15 +461,11 @@ class SpeechPipeline:
             )
             raw_pcm = bytes(decoded.samples)
 
-            # Ensuring even number of bytes for 16-bit samples
             if len(raw_pcm) % 2 != 0:
                 raw_pcm = raw_pcm[:-1]
 
-            # Converting to mulaw for Twilio
             audio_mulaw = audioop.lin2ulaw(raw_pcm, 2)
-            log.info("Converted to %d mulaw bytes", len(audio_mulaw))
 
-            # Sending in chunks to Twilio
             for i in range(0, len(audio_mulaw), self.CHUNK_SIZE):
                 chunk = audio_mulaw[i : i + self.CHUNK_SIZE]
                 payload = base64.b64encode(chunk).decode("utf-8")
@@ -333,30 +481,26 @@ class SpeechPipeline:
                     log.warning("Failed to send audio chunk: %s", exc)
                     break
 
-            log.debug("Spoke %d chars, %d mulaw bytes", len(text), len(audio_mulaw))
-
         except (httpx.HTTPError, miniaudio.DecodeError, ValueError) as exc:
             log.error("TTS/decode failed: %s", exc)
 
         finally:
-            # Waiting for audio playback to complete
             await asyncio.sleep(self.AUDIO_BUFFER_DELAY)
             self._is_speaking = False
-            self.end_detector.reset_for_new_turn()
+            
+            # Detecting barge-in
+            if self._tts_started_at and self.end_detector.last_speech_time:
+                if self.end_detector.last_speech_time > self._tts_started_at:
+                    log.info("Barge-in detected - preserving state")
+                else:
+                    self.end_detector.reset_for_new_turn()
+            else:
+                self.end_detector.reset_for_new_turn()
+            
+            self._tts_started_at = None
 
     async def _elevenlabs_tts(self, text: str) -> bytes:
-        """
-        Convert text to speech using ElevenLabs API.
-        
-        Args:
-            text: Text to convert to speech
-            
-        Returns:
-            MP3 audio bytes
-            
-        Raises:
-            httpx.HTTPError: If API request fails
-        """
+        """Converting text to speech using ElevenLabs API."""
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{settings.elevenlabs_voice_id}"
         headers = {
             "xi-api-key": settings.elevenlabs_api_key,
@@ -377,10 +521,18 @@ class SpeechPipeline:
             return response.content
 
     async def close(self) -> None:
-        """Clean up resources and close Deepgram connection."""
+        """Cleaning up resources and close Deepgram connection."""
         self._closed = True
+        
+        # Cancelling background tasks
+        if self._active_wait_task:
+            self._active_wait_task.cancel()
+        if self._monitor_task:
+            self._monitor_task.cancel()
+            
         if self._deepgram_connection:
             try:
                 await self._deepgram_connection.finish()
+                log.info("Deepgram connection closed successfully")
             except Exception as exc:
                 log.warning("Error closing Deepgram connection: %s", exc)

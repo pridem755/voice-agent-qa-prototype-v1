@@ -1,9 +1,3 @@
-"""
-QA analysis for call transcripts.
-
-Uses GPT-4 to analyze call transcripts and identify bugs, quality issues,
-and failure modes in the agent's responses.
-"""
 import asyncio
 import logging
 from pathlib import Path
@@ -72,16 +66,16 @@ are not actionable.
 
 
 class QAAnalyzer:
-    """Analyzes call transcripts using GPT-4 to identify bugs and issues."""
+    """Analyzing call transcripts using GPT-4 to identify bugs and issues."""
     
     def __init__(self):
-        """Initialize QA analyzer with OpenAI client."""
+        """Initializing QA analyzer with OpenAI client."""
         self._client = AsyncOpenAI(api_key=settings.openai_api_key)
         REPORTS_DIR.mkdir(exist_ok=True)
 
     async def analyze_transcript(self, transcript_path: Path) -> str:
         """
-        Analyze a single transcript for bugs and issues.
+        Analyzing a single transcript for bugs and issues.
         
         Args:
             transcript_path: Path to transcript file
@@ -114,7 +108,7 @@ class QAAnalyzer:
 
     async def analyze_all(self, transcripts_dir: Path) -> None:
         """
-        Analyze all transcripts and generate bug report.
+        Analyzing all transcripts and generate bug report.
         
         Args:
             transcripts_dir: Directory containing transcript files

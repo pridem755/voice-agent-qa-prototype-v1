@@ -1,9 +1,3 @@
-"""
-Scenario management and call orchestration.
-
-Loads test scenarios, places calls via Twilio, monitors call status,
-and runs post-call QA analysis on transcripts.
-"""
 import argparse
 import asyncio
 import json
@@ -32,7 +26,7 @@ TERMINAL_STATUSES = {"completed", "failed", "busy", "no-answer", "canceled"}
 
 def load_scenarios(prefix: str = "") -> list[dict]:
     """
-    Load scenario definitions from JSON files.
+    Loading scenario definitions from JSON files.
     
     Args:
         prefix: Optional prefix to filter scenarios (e.g., "03")
@@ -64,7 +58,7 @@ def load_scenarios(prefix: str = "") -> list[dict]:
 
 def write_current_scenario(scenario: dict) -> None:
     """
-    Write scenario to current_scenario.json for server to read.
+    Writing scenario to current_scenario.json for server to read.
     
     Args:
         scenario: Scenario dictionary to write
@@ -82,7 +76,7 @@ def write_current_scenario(scenario: dict) -> None:
 
 def place_call(twilio_client: TwilioClient) -> str:
     """
-    Place a call via Twilio REST API.
+    Placing a call via Twilio REST API.
     
     Args:
         twilio_client: Initialized Twilio client
@@ -119,7 +113,7 @@ def wait_for_call(
     timeout: int,
 ) -> str:
     """
-    Poll Twilio for call status until terminal state or timeout.
+    Polling Twilio for call status until terminal state or timeout.
     
     Args:
         twilio_client: Initialized Twilio client
@@ -158,7 +152,7 @@ def wait_for_call(
 
 async def run_all(dry_run: bool = False, scenario_prefix: str = "") -> None:
     """
-    Run all test scenarios: place calls, wait for completion, analyze results.
+    Running all test scenarios: place calls, wait for completion, analyze results.
     
     Args:
         dry_run: If True, list scenarios without placing calls
@@ -225,7 +219,6 @@ async def run_all(dry_run: bool = False, scenario_prefix: str = "") -> None:
         "Done. Check transcripts/, reports/bug_report.md, reports/run_summary.md"
     )
 
-
 def main():
     """CLI entry point with argument parsing."""
     parser = argparse.ArgumentParser(
@@ -242,7 +235,7 @@ Examples:
         "--scenario",
         default="",
         metavar="PREFIX",
-        help="Only run scenarios whose filename starts with this prefix (e.g. '03')",
+        help="Only run scenarios whose filename starts with scenario_o1",
     )
     parser.add_argument(
         "--dry-run",

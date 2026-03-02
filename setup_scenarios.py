@@ -1,7 +1,3 @@
-"""
-Scenario definitions and setup.
-
-"""
 import json
 from pathlib import Path
 
@@ -340,7 +336,7 @@ SCENARIOS = [
 ]
 
 def main():
-    """Generate scenario JSON files from definitions."""
+    """Generating scenario JSON files from definitions."""
     for scenario in SCENARIOS:
         # Creating safe filename from scenario name
         safe_name = scenario["name"][:30].lower()
