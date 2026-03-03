@@ -226,7 +226,7 @@ async def media_stream(websocket: WebSocket):
                         break
 
                 elif event_type == "stop":
-                    log.info("Twilio sent stop event — ending call")
+                    log.info("Twilio sent stop event - ending call")
                     shutdown_requested.set()
                     break
 

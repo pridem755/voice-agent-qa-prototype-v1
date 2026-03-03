@@ -24,7 +24,7 @@ def mock_openai(reply: str):
 
 
 class TestCallRecorderToQAAnalyzer:
-    """Tests for CallRecorder → QAAnalyzer pipeline."""
+    """Tests for CallRecorder."""
     
     @pytest.mark.asyncio
     async def test_full_recording_and_analysis_pipeline(

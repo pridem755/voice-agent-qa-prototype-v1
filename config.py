@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     """
     Application settings loaded from environment variables.
     
-    All values are loaded from .env file. See .env.example for
+    All values are loaded from .env file. See README.md for
     required variables and their descriptions.
     """
     

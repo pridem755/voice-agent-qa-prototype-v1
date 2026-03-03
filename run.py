@@ -98,7 +98,7 @@ def start_ngrok(port: int) -> str:
 
     except ImportError:
         # Falling back to ngrok CLI
-        log.info("pyngrok not found — trying ngrok CLI")
+        log.info("pyngrok not found - trying ngrok CLI")
         return _start_ngrok_cli(port)
 
 
@@ -174,13 +174,13 @@ def run_preflight_checks() -> None:
     if errors:
         print("\n[PREFLIGHT FAILED]\n")
         for err in errors:
-            print(f"  - {err}")
+            print(f"- {err}")
         print(
             "\nFix the above issues and try again.\n"
         )
         sys.exit(1)
 
-    log.info("Preflight OK — %d scenario(s) ready", len(scenario_files))
+    log.info("Preflight OK - %d scenario(s) ready", len(scenario_files))
 
 
 async def main(scenario_filter: str = None, dry_run: bool = False):
@@ -199,7 +199,7 @@ async def main(scenario_filter: str = None, dry_run: bool = False):
         scenarios = load_scenarios()
         print("\nAvailable scenarios:")
         for s in scenarios:
-            print(f"  [{s.get('id', '??')}] {s['name']}")
+            print(f"[{s.get('id', '??')}] {s['name']}")
         return
 
     # Starting FastAPI webhook server

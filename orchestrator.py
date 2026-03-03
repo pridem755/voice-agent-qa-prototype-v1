@@ -27,12 +27,7 @@ TERMINAL_STATUSES = {"completed", "failed", "busy", "no-answer", "canceled"}
 def load_scenarios(prefix: str = "") -> list[dict]:
     """
     Loading scenario definitions from JSON files.
-    
-    Args:
-        prefix: Optional prefix to filter scenarios (e.g., "03")
-        
-    Returns:
-        List of scenario dictionaries
+   
     """
     files = sorted(SCENARIOS_DIR.glob("*.json"))
     if not files:
@@ -235,7 +230,7 @@ Examples:
         "--scenario",
         default="",
         metavar="PREFIX",
-        help="Only run scenarios whose filename starts with scenario_o1",
+        help="Only run scenarios whose filename starts with scenario PREFIX",
     )
     parser.add_argument(
         "--dry-run",

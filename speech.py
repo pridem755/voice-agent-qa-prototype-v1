@@ -55,14 +55,14 @@ class AdaptiveEndOfSpeechDetector:
         self.consecutive_silence_frames = 0
         
         # Hangover configuration
-        self.hangover_frames = int(250 / self.frame_duration_ms)  # 250ms
+        self.hangover_frames = int(250 / self.frame_duration_ms)  
         
         # Post-hangover silence threshold
-        self.post_hangover_silence_frames = int(1200 / self.frame_duration_ms)  # 1.2s
+        self.post_hangover_silence_frames = int(1200 / self.frame_duration_ms)  
         
         # Timing
         self.post_hangover_silence_start = None
-        self.last_speech_time = None  # Track when speech was last detected
+        self.last_speech_time = None  
     
     def process_vad_frame(self, mulaw_bytes: bytes) -> None:
         """Processing audio through VAD to detect speech vs silence."""
@@ -87,7 +87,7 @@ class AdaptiveEndOfSpeechDetector:
             if is_speech:
                 self.consecutive_silence_frames = 0
                 self.post_hangover_silence_start = None
-                self.last_speech_time = time.time()  # Update speech timestamp
+                self.last_speech_time = time.time() 
             else:
                 self.consecutive_silence_frames += 1
                 
