@@ -125,7 +125,7 @@ This command will start the webhook server, open an ngrok tunnel for Twilio to r
 To run only specific scenarios, use the scenario flag with a prefix:
 
 ```bash
-python run.py --scenario 01
+python run.py --scenario scenario_01  
 ```
 
 This runs only scenarios whose ID starts with "01". You can use any prefix to filter scenarios.
@@ -325,7 +325,7 @@ The QA analyzer system prompt in qa_analyzer.py defines what counts as a bug. Yo
 
 ## Best Practices
 
-Run a single scenario first to verify everything is working before running all 13 scenarios. Use python run.py --scenario 01 to test with just one call.
+Run a single scenario first to verify everything is working before running all 13 scenarios. Use ''' python run.py --scenario scenario_01 '''  to test with just one call.
 
 Monitor the first few calls closely by watching the console output. This helps you catch configuration issues early.
 
