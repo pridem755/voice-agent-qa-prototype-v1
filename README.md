@@ -253,7 +253,7 @@ If calls connect but immediately disconnect, check the server logs for errors. T
 
 Verify your Deepgram API key is valid and has available credits. Check the Deepgram dashboard to confirm.
 
-Make sure the ElevenLabs voice ID is correct. The default is Rachel, but you can use any voice from your ElevenLabs account.
+Make sure the ElevenLabs voice ID is correct. Use any voice that you want from your ElevenLabs account.
 
 If transcripts are empty, the speech detection thresholds might be too aggressive. You can adjust MIN_SILENCE_WITH_FINAL and MIN_SILENCE_NO_FINAL in speech.py.
 
